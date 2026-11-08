@@ -7,6 +7,8 @@ package sqltool_test
 import (
 	"fmt"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -272,6 +274,32 @@ func TestScanners(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGooseStmtDecls(t *testing.T) {
+	path := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(path, "20260903000001_demo.sql"), []byte(`-- +goose Up
+CREATE TABLE items (id serial PRIMARY KEY, label text NOT NULL);
+
+INSERT INTO items (label)
+VALUES ('Download report')
+ON CONFLICT DO NOTHING;
+
+-- +goose Down
+DROP TABLE items;
+`), 0o644))
+
+	d, err := sqltool.NewGooseDir(path)
+	require.NoError(t, err)
+	files, err := d.Files()
+	require.NoError(t, err)
+	require.Len(t, files, 1)
+	stmts, err := files[0].Stmts()
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		"CREATE TABLE items (id serial PRIMARY KEY, label text NOT NULL);",
+		"INSERT INTO items (label)\nVALUES ('Download report')\nON CONFLICT DO NOTHING;",
+	}, stmts)
 }
 
 func TestChecksum(t *testing.T) {
